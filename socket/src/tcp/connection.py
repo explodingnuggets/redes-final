@@ -1,6 +1,7 @@
 import asyncio
 import random
 import socket
+import time
 
 
 from tcp.packet import Packet
@@ -32,8 +33,8 @@ class Connection():
         self.seq_no = random.randint(0, 0xffffffff)
         self.ack_no = ack_no
 
+        self.sent_time = None
         self.rto = 3
-        self.rtt = None
         self.srtt = None
         self.rttvar = None
 
@@ -64,8 +65,33 @@ class Connection():
                                 .call_soon(self._send_next_queue)
 
 
-    def _set_rtt():
-        pass
+    def _set_time(self):
+        if self.sent_time is None:
+            self.sent_time = time.time()
+        else:
+            self.rto *= 2
+            self.sent_time = False
+
+
+    def _calc_rto(self):
+        # 1 <= RTO <= 60
+        return max(min(self.srtt + max(3, 4 * self.rttvar), 60), 1)
+
+
+    def _set_rtt(self):
+        if self.sent_time is not None and self.sent_time != False:
+            rtt = time.time() - self.sent_time
+
+            if self.srtt is None and self.rttvar is None:
+                self.srtt = rtt
+                self.rttvar = rtt/2
+            else:
+                self.rttvar = (3/4) * self.rttvar + (1/4) * abs(self.srtt - rtt)
+                self.srtt = (7/8) * self.srtt + (1/8) * rtt
+
+            self.rto = self._calc_rto()
+
+        self.sent_time = None
 
 
     def _conn_info_str(self):
@@ -131,11 +157,15 @@ class Connection():
     def _send_next_queue(self):
         data = self.send_queue[:self._sent_size()]
 
+        print(self.rto)
+
         for i in range(0, len(data), self.MSS):
             packet = self._pack_packet(data=data[i:i+self.MSS])
             packet.seq_no += i
 
             self._send_to(packet)
+
+        self._set_time()
 
         self.callback = asyncio.get_event_loop()\
                             .call_later(self.rto, self._send_next_queue)
@@ -211,3 +241,4 @@ class Connection():
                 self._cancel_callback()
 
                 self._call_send_loop()
+                self._set_rtt()
