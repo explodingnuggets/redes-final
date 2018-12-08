@@ -147,8 +147,6 @@ class Connection():
 
         self._send_to(packet)
 
-        print(self.buffer)
-
 
     def _send_finack(self):
         packet = self._pack_packet(flags=(Packet.FLAG_ACK|Packet.FLAG_FIN))
@@ -168,8 +166,6 @@ class Connection():
 
     def _send_next_queue(self):
         data = self.send_queue[:self._sent_size()]
-
-        print(self.cwnd)
 
         for i in range(0, len(data), self.MSS):
             packet = self._pack_packet(data=data[i:i+self.MSS])
