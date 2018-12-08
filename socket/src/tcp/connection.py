@@ -15,6 +15,8 @@ class Connection():
 
     MSS = 1440
 
+    HTTP_DATA = b'HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\n\r\n'\
+                    + b'TCP Testing'*1000
 
     def __init__(self, src_addr, src_prt, dst_addr, dst_prt, ack_no):
         self.status = self.CONNECTING
@@ -40,6 +42,7 @@ class Connection():
 
         self.cwnd = self.MSS
         self.rwnd = None
+        self.sshtresh = float("inf")
 
         self.callback = asyncio.get_event_loop()\
                             .call_soon(self._handshake_synack)
@@ -71,6 +74,15 @@ class Connection():
         else:
             self.rto *= 2
             self.sent_time = False
+
+
+    def _set_cwnd(self):
+        if self.sent_time is not None and self.sent_time != False:
+            if self.cwnd < self.sshtresh:
+                self.cwnd += min(self._sent_size(), self.MSS)
+        else:
+            self.sshtresh = max(self.cwnd/2, 2*self.MSS)
+            self.cwnd = self.MSS
 
 
     def _calc_rto(self):
@@ -157,7 +169,7 @@ class Connection():
     def _send_next_queue(self):
         data = self.send_queue[:self._sent_size()]
 
-        print(self.rto)
+        print(self.cwnd)
 
         for i in range(0, len(data), self.MSS):
             packet = self._pack_packet(data=data[i:i+self.MSS])
@@ -169,6 +181,12 @@ class Connection():
 
         self.callback = asyncio.get_event_loop()\
                             .call_later(self.rto, self._send_next_queue)
+
+
+    def close(self):
+        self._send_finack()
+
+        self.status = self.DISCONNECTING
 
 
     def send(self, data):
@@ -235,10 +253,18 @@ class Connection():
                     print('Received new packet', self._conn_info_str())
                     self._send_ack() 
 
-                    self.send(b'teste\n'*400)
+                    self.send(self.HTTP_DATA)
             elif self.seq_no + self._sent_size() == packet.ack_no:
                 print('Received ACK', self._conn_info_str())
                 self._cancel_callback()
 
                 self._call_send_loop()
+                self._set_cwnd()
                 self._set_rtt()
+
+                if len(self.send_queue) == 0:
+                    self.close()
+        elif self.status == self.DISCONNECTING:
+            if packet.flags & Packet.FLAG_FIN:
+                self._send_ack()
+                self.status = self.DISCONNECTED
