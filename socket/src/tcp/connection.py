@@ -33,8 +33,12 @@ class Connection():
         self.ack_no = ack_no
 
         self.rto = 3
+        self.rtt = None
+        self.srtt = None
+        self.rttvar = None
 
         self.cwnd = self.MSS
+        self.rwnd = None
 
         self.callback = asyncio.get_event_loop()\
                             .call_soon(self._handshake_synack)
@@ -46,6 +50,24 @@ class Connection():
                    packet.src_prt, packet.seq_no)
 
 
+    def _cancel_callback(self):
+        self.callback.cancel()
+        self.callback = None
+
+
+    def _call_send_loop(self):
+        self.seq_no += self._sent_size()
+        self.send_queue = self.send_queue[self._sent_size():]
+
+        if len(self.send_queue) > 0:
+            self.callback = asyncio.get_event_loop()\
+                                .call_soon(self._send_next_queue)
+
+
+    def _set_rtt():
+        pass
+
+
     def _conn_info_str(self):
         return '[%s:%d] -> [%d]' % (self.dst_addr, self.dst_prt, self.src_prt)
 
@@ -53,6 +75,10 @@ class Connection():
     def _window_size(self):
         bufcap = self.buflen - len(self.buffer)
         return bufcap if bufcap > 0 else 0
+
+
+    def _sent_size(self):
+        return min(len(self.send_queue), self.cwnd, self.rwnd)
 
 
     def _send_to(self, packet):
@@ -70,11 +96,9 @@ class Connection():
 
 
     def _pack_packet(self, flags=Packet.FLAG_ACK, data=b''):
-        seq_no = self.seq_no + len(data)
-
         return Packet(self.src_addr, self.src_prt, self.dst_addr, self.dst_prt,
-                      seq_no, self.ack_no, (5<<12)|flags, self._window_size(),
-                      0, 0, data)
+                      self.seq_no, self.ack_no, (5<<12)|flags,
+                      self._window_size(), 0, 0, data)
 
 
     def _send_ack(self, ack_no=None):
@@ -105,10 +129,16 @@ class Connection():
 
 
     def _send_next_queue(self):
-        data = self.send_queue[:self.cwnd]
-        packet = self._pack_packet(data=data)
+        data = self.send_queue[:self._sent_size()]
 
-        self._send_to(packet)
+        for i in range(0, len(data), self.MSS):
+            packet = self._pack_packet(data=data[i:i+self.MSS])
+            packet.seq_no += i
+
+            self._send_to(packet)
+
+        self.callback = asyncio.get_event_loop()\
+                            .call_later(self.rto, self._send_next_queue)
 
 
     def send(self, data):
@@ -131,6 +161,8 @@ class Connection():
 
 
     def received_packet(self, packet):
+        self.rwnd = packet.win_size
+
         """
         Finishes connection handshake, enabling this connection to receive data
         """
@@ -141,7 +173,7 @@ class Connection():
                 self.status = self.CONNECTED
                 self.ack_no += 1
                 self.seq_no += 1
-                self.callback.cancel()
+                self._cancel_callback()
 
         elif self.status == self.CONNECTED:
             """
@@ -171,4 +203,11 @@ class Connection():
 
                 elif self._push_buffer(packet.data):
                     print('Received new packet', self._conn_info_str())
-                    self._send_ack()            
+                    self._send_ack() 
+
+                    self.send(b'teste\n'*400)
+            elif self.seq_no + self._sent_size() == packet.ack_no:
+                print('Received ACK', self._conn_info_str())
+                self._cancel_callback()
+
+                self._call_send_loop()
