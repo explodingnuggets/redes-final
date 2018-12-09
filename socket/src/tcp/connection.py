@@ -17,7 +17,8 @@ class Connection():
     MSS = 1440
 
     HTTP_DATA = b'HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\n\r\n'\
-                    + b'TCP Testing'*1000
+                    + b'Trabalho de Redes - UFSCar 2018/2\n'*5000\
+                    + b'Bortinho GOD'
 
     def __init__(self, src_addr, src_prt, dst_addr, dst_prt, ack_no):
         self.status = self.CONNECTING
@@ -122,7 +123,6 @@ class Connection():
 
     def _send_to(self, packet):
         raw_data = packet.to_bytes()
-        print('Sending to', self.dst_addr, 'from', self.src_addr)
         raw_packet = IPPacket(4, 5, 0, 0, 20 + len(raw_data),
                               self.ip.get_packet_id(), 0, 0, 15, 6, 0,
                               self.src_addr, self.dst_addr, raw_data).to_bytes()
