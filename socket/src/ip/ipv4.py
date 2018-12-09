@@ -39,9 +39,11 @@ class IPV4():
         if dgram.received_last:
             packet = dgram.reassemble()
 
-            if packet is not None and dgram.proto == Packet.PROTO_TCP:
-                print(packet)
-                self.proto.check_packet(packet)
+            if packet is not None:
+                print('Reassembled fragmented packet [Total of %d bytes]' %
+                    len(packet))
+                if dgram.proto == Packet.PROTO_TCP:
+                    self.proto.check_packet(packet)
 
 
     def _try_dgram(self, dgram_id):
@@ -59,7 +61,7 @@ class IPV4():
 
         dgram_id = self._get_dgram_id(packet)
 
-        if packet.flags & Packet.FLAG_MF:  
+        if packet.flags & Packet.FLAG_MF:
             if dgram_id in self.datagrams:
                 dgram = self.datagrams[dgram_id]
             else:
