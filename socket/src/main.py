@@ -3,11 +3,17 @@ import asyncio
 import socket
 
 
+from ethernet import eth
 from ip import ipv4
 from tcp import tcp
 
+ETH_P_ALL = 0x0003
 
-ETH_P_IP = 0x0800
+SRC_MAC = '5c:93:a2:d2:ad:d1'
+
+DST_MAC = 'a4:2b:b0:a5:40:5a'
+
+IF_NAME = 'wlp2s0'
 
 
 def raw_recv(fd, proto):
@@ -17,11 +23,12 @@ def raw_recv(fd, proto):
 
 
 if __name__ == '__main__':
-    fd = socket.socket(socket.AF_PACKET, socket.SOCK_DGRAM,
-                       socket.htons(ETH_P_IP))
-    proto_tcp = tcp.TCP(5000)
-    proto_ip = ipv4.IPV4(proto_tcp)
+    fd = socket.socket(socket.AF_PACKET, socket.SOCK_RAW,
+                       socket.htons(ETH_P_ALL))
+    fd.bind((IF_NAME, 0))
+
+    proto_eth = eth.Ethernet(SRC_MAC, DST_MAC, fd)
 
     loop = asyncio.get_event_loop()
-    loop.add_reader(fd, raw_recv, fd, proto_ip)
+    loop.add_reader(fd, raw_recv, fd, proto_eth)
     loop.run_forever()

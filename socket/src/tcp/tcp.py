@@ -6,8 +6,10 @@ class TCP():
     connections = {}
 
 
-    def __init__(self, port):
+    def __init__(self, port, eth, ip):
         self.port = port
+        self.eth = eth
+        self.ip = ip
 
 
     @classmethod
@@ -24,6 +26,8 @@ class TCP():
             if conn_id not in self.connections:
                 print('New connection [%s:%d] -> [%d]' % conn_id)
                 self.connections[conn_id] = Connection.from_packet(packet)
+                self.connections[conn_id].eth = self.eth
+                self.connections[conn_id].ip = self.ip
             else:
                 conn = self.connections[conn_id]
                 conn.received_packet(packet)

@@ -3,19 +3,31 @@ import asyncio
 
 from ip.datagram import Datagram
 from ip.packet import Packet
+from tcp import tcp
 
 
 class IPV4():
     REASSEMBLY_TIMEOUT = 3
 
-    def __init__(self, proto):
-        self.proto = proto
+
+    def __init__(self, eth):
+        self.proto = tcp.TCP(5000, eth, self)
         self.datagrams = {}
+
+        self.cur_id = 0
 
 
     @classmethod
     def _get_dgram_id(cls, packet):
         return (packet.src_addr, packet.ident)
+
+
+    def get_packet_id(self):
+        """
+        Increments ipv4 packet counter, and returns the previous value
+        """
+        self.cur_id = (self.cur_id + 1) & 0xffff
+        return (self.cur_id - 1) & 0xffff
 
 
     def _callback(self, dgram_id):

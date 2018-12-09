@@ -4,6 +4,7 @@ import socket
 import time
 
 
+from ip.packet import Packet as IPPacket
 from tcp.packet import Packet
 
 
@@ -20,8 +21,8 @@ class Connection():
 
     def __init__(self, src_addr, src_prt, dst_addr, dst_prt, ack_no):
         self.status = self.CONNECTING
-        self.fd = socket.socket(socket.AF_INET, socket.SOCK_RAW,
-                                socket.IPPROTO_TCP)
+        self.ip = None
+        self.eth = None
         
         self.buffer = bytes()
         self.buflen = 4096
@@ -30,7 +31,7 @@ class Connection():
 
         self.src_addr = src_addr
         self.src_prt = src_prt
-        self.dst_addr = src_addr
+        self.dst_addr = dst_addr
         self.dst_prt = dst_prt
         self.seq_no = random.randint(0, 0xffffffff)
         self.ack_no = ack_no
@@ -120,7 +121,12 @@ class Connection():
 
 
     def _send_to(self, packet):
-        self.fd.sendto(packet.to_bytes(), (self.dst_addr, self.dst_prt))
+        raw_data = packet.to_bytes()
+        print('Sending to', self.dst_addr, 'from', self.src_addr)
+        raw_packet = IPPacket(4, 5, 0, 0, 20 + len(raw_data),
+                              self.ip.get_packet_id(), 0, 0, 15, 6, 0,
+                              self.src_addr, self.dst_addr, raw_data).to_bytes()
+        self.eth.send(raw_packet, self.eth.ETH_P_IP)
 
 
     def _push_buffer(self, data):

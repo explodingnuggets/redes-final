@@ -32,6 +32,26 @@ class Packet():
 
 
     @classmethod
+    def _str2addr(cls, addr):
+        return bytes(int(x) for x in addr.split('.'))
+
+
+    def _fix_checksum(self, segment):
+        if len(segment) % 2 == 1:
+            segment += b'\x00'
+        
+        checksum = 0
+        for i in range(0, len(segment), 2):
+            x, = struct.unpack('!H', segment[i:i+2])
+            checksum += x
+            while checksum > 0xffff:
+                checksum = (checksum & 0xffff) + 1
+        
+        checksum = ~(checksum)
+        self.checksum = (checksum & 0xffff)
+
+
+    @classmethod
     def parse(cls, raw_data):
         version = raw_data[0] >> 4
         ihl = raw_data[0] & 0xf
@@ -50,3 +70,22 @@ class Packet():
         return Packet(version, ihl, dscp, ecn, total_len, ident, flags,
                       frag_offset, ttl, proto, checksum, src_addr, dst_addr,
                       payload)
+
+
+    def _pack_header(self):
+        return struct.pack('!BBHHHBBH',
+                           (self.version << 4) | (self.ihl & 0xf),
+                           (self.dscp << 2) | (self.ecn & 0x3),
+                           self.total_len, self.ident,
+                           (self.flags << 13) | (self.frag_offset & 0x1fff),
+                           self.ttl, self.proto, self.checksum)\
+                           + self._str2addr(self.src_addr)\
+                           + self._str2addr(self.dst_addr)
+
+
+    def to_bytes(self):
+        self.checksum = 0
+        self.total_len = (4*self.ihl) + len(self.payload)
+        self._fix_checksum(self._pack_header())
+
+        return self._pack_header() + self.payload
